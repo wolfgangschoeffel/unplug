@@ -40,7 +40,11 @@ if (!function_exists('Em4nl\Unplug\front_controller')) {
         define('UNPLUG_FRONT_CONTROLLER', TRUE);
         if (UNPLUG_CACHE_ON) {
             global $_unplug_cache;
-            $_unplug_cache = new \Em4nl\U\Cache(UNPLUG_CACHE_DIR);
+            $_unplug_cache = new \Em4nl\U\Cache(
+                UNPLUG_CACHE_DIR,
+                NULL,
+                _get_cache_options()
+            );
             if ($invalidate) {
                 $_unplug_cache->invalidate($invalidate);
             }

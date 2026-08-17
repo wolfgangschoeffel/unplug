@@ -98,9 +98,138 @@ if (!function_exists('Em4nl\Unplug\_get_default_cache')) {
         }
         static $cache;
         if (!isset($cache)) {
-            $cache = new \Em4nl\U\Cache(UNPLUG_CACHE_DIR);
+            $cache = new \Em4nl\U\Cache(
+                UNPLUG_CACHE_DIR,
+                NULL,
+                _get_cache_options()
+            );
         }
         return $cache;
+    }
+}
+
+if (!function_exists('Em4nl\Unplug\_get_cache_options')) {
+    function _get_cache_options() {
+        $options = array();
+
+        // key the cache on the path the router matched on, not on
+        // REQUEST_URI as it arrived. the two disagree: the router
+        // trims any number of leading and trailing slashes and stops
+        // at the first ? once the url is decoded, so /projekte,
+        // //projekte/// and /projekte%3Fx are all one page to it. if
+        // the cache disagrees they're one page and three files, and
+        // anyone can keep adding slashes to get more.
+        $path = _get_cache_key_path();
+        if (isset($path)) {
+            $options['cache_key_path'] = $path;
+        }
+
+        // set UNPLUG_CACHE_KEY_PARAMS in unplug-config.php to change
+        // what part of the query string is in the key. leave it
+        // undefined to keep all of it, which is the default.
+        if (defined('UNPLUG_CACHE_KEY_PARAMS')) {
+            $options['cache_key_params'] = _resolve_cache_key_params(
+                UNPLUG_CACHE_KEY_PARAMS, $path);
+        }
+
+        return $options;
+    }
+}
+
+if (!function_exists('Em4nl\Unplug\_get_cache_key_path')) {
+    function _get_cache_key_path() {
+        // NULL when there's no request to speak of - wp-cli, wp-cron -
+        // where the cache is only ever flushed, never keyed
+        if (!isset($_SERVER['REQUEST_URI'])) {
+            return NULL;
+        }
+        // exactly what Router::run does to pick a route, so that two
+        // urls it routes the same can't end up under two keys
+        $parts = explode('?', _get_default_router()->get_request_path(), 2);
+        return '/' . trim($parts[0], '/');
+    }
+}
+
+if (!function_exists('Em4nl\Unplug\_resolve_cache_key_params')) {
+    function _resolve_cache_key_params($config, $path=NULL) {
+        if (!isset($config)) {
+            // NULL: upstream behaviour, whole query string in the key
+            return NULL;
+        }
+        if (!is_array($config)) {
+            throw new \Exception(
+                'UNPLUG_CACHE_KEY_PARAMS must be an array or NULL');
+        }
+        if (_is_list($config)) {
+            // a flat list of parameter names: one whitelist that
+            // applies to every path
+            foreach ($config as $param) {
+                if (is_string($param) && isset($param[0])
+                        && $param[0] === '/') {
+                    throw new \Exception(
+                        "UNPLUG_CACHE_KEY_PARAMS contains '$param', which"
+                            . ' looks like a path, but this is a flat list'
+                            . ' of parameter names applied to every path.'
+                            . " to declare parameters per path, write"
+                            . " array('$param' => array(...)) instead.");
+                }
+            }
+            return $config;
+        }
+
+        // a map of path pattern => parameter list. resolved once,
+        // here, from the static config and the current request path -
+        // never from the live application router, whose routes may
+        // not exist yet (front controller mode looks up the cache
+        // before WordPress loads). so this always gives the same
+        // answer regardless of when it's called, and serve() and
+        // add() can never disagree about the key.
+        if (!isset($path)) {
+            // no request to match against (wp-cli, wp-cron)
+            return array();
+        }
+        return _match_cache_key_params($config, $path);
+    }
+}
+
+if (!function_exists('Em4nl\Unplug\_match_cache_key_params')) {
+    function _match_cache_key_params($config, $path) {
+        // matched with a throwaway Router, so that ':slug', '*' and
+        // optional 'segment?' patterns mean exactly what they mean in
+        // a route definition, instead of a second, subtly different
+        // matcher. a path that isn't listed drops the query string
+        // entirely - the safe default for a route nobody has said
+        // needs anything from it.
+        $router = new \Em4nl\U\Router();
+        $result = array();
+        $matched = FALSE;
+        foreach ($config as $pattern => $params) {
+            if (isset($params) && !is_array($params)) {
+                throw new \Exception(
+                    "UNPLUG_CACHE_KEY_PARAMS['$pattern'] must be an array"
+                        . ' or NULL');
+            }
+            $router->get($pattern, function($ctx) use (
+                $params, &$result, &$matched
+            ) {
+                $result = $params;
+                $matched = TRUE;
+            });
+        }
+        $router->run($path, 'GET');
+        return $matched ? $result : array();
+    }
+}
+
+if (!function_exists('Em4nl\Unplug\_is_list')) {
+    function _is_list($array) {
+        $i = 0;
+        foreach ($array as $key => $value) {
+            if ($key !== $i++) {
+                return FALSE;
+            }
+        }
+        return TRUE;
     }
 }
 

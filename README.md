@@ -200,6 +200,72 @@ define('UNPLUG_CACHE_DIR', __DIR__ . '/_unplug_cache');
 define('UNPLUG_CACHE_ON', TRUE); // set to FALSE to disable the cache
 ```
 
+Optionally, also define `UNPLUG_CACHE_KEY_PARAMS` to change what's
+part of the cache key. By default the whole query string is part of
+it, same as WordPress' normal behaviour. If your routes never read
+`$_GET` - the query string can't affect the response either way, since
+the router already matches on the path only - keying on it just lets
+a distinct query string fill the cache with a new file for nothing:
+`/?a=1`, `/?a=2`, `/?a=3`, … or, on ordinary traffic, one entry each
+for `?fbclid=`, `?gclid=`, `?utm_source=`. Set it to an empty array to
+drop the query string from the key entirely, or to a list of
+parameter names to keep only those:
+
+```php
+// no query parameter is ever part of the key, on any path
+define('UNPLUG_CACHE_KEY_PARAMS', array());
+
+// only ?seite= is, on any path
+define('UNPLUG_CACHE_KEY_PARAMS', array('seite'));
+```
+
+Leave it undefined to keep the default.
+
+### Per path
+
+`UNPLUG_CACHE_KEY_PARAMS` can also be a map of path pattern =>
+parameter list, for when only some routes care about a query
+parameter:
+
+```php
+define('UNPLUG_CACHE_KEY_PARAMS', array(
+    '/projekte' => array('kategorie'),
+    '/projekte/:slug' => array('tab'),
+    '/suche' => NULL, // this one path keeps the whole query string
+));
+```
+
+The patterns are matched with a `Router`, so `:slug`, `*` and
+optional `segment?` mean exactly what they mean in a route
+definition. **A path that isn't listed drops the query string
+entirely** - the safe default for a route nobody has said needs
+anything from it, so a route added later is safe by default rather
+than accidentally cached on the wrong query string until someone
+remembers to add it here. Add `'*' => NULL` to make unlisted paths
+keep their whole query string instead.
+
+This is resolved once, from the static config and the current
+request's path - never by asking the application's router, which may
+not have any routes registered yet: a site using the custom front
+controller looks up the cache before WordPress loads. So the answer
+is always the same regardless of when it's computed, and there is
+nothing that can disagree between the request that decides whether to
+serve from the cache and the one that decides whether to write to
+it.
+
+### The path part of the key
+
+Regardless of `UNPLUG_CACHE_KEY_PARAMS`, unplug keys the cache on the
+path the **router** matched on, rather than on `REQUEST_URI` as it
+arrived. The router trims any number of leading and trailing slashes,
+and stops at the first `?` once the url has been decoded, so
+`/projekte`, `//projekte///` and `/projekte%3Fx` are all the same
+page to it. Keying on the raw request URI would make them three cache
+files for one page, and anyone could keep adding slashes to get more.
+
+This needs no configuration and applies even with
+`UNPLUG_CACHE_KEY_PARAMS` left undefined.
+
 ## Development
 
 Install dependencies
