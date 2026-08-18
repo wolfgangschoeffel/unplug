@@ -204,12 +204,12 @@ Optionally, also define `UNPLUG_CACHE_KEY_PARAMS` to change what's
 part of the cache key. By default the whole query string is part of
 it, same as WordPress' normal behaviour. If your routes never read
 `$_GET` - the query string can't affect the response either way, since
-the router already matches on the path only - keying on it just lets
-a distinct query string fill the cache with a new file for nothing:
-`/?a=1`, `/?a=2`, `/?a=3`, … or, on ordinary traffic, one entry each
-for `?fbclid=`, `?gclid=`, `?utm_source=`. Set it to an empty array to
-drop the query string from the key entirely, or to a list of
-parameter names to keep only those:
+the router already matches on the path only - keying on it just means
+the same page is cached once per distinct query string for nothing:
+on ordinary traffic that's a separate entry for each `?fbclid=`,
+`?gclid=` or `?utm_source=` a link happens to carry. Set it to an
+empty array to drop the query string from the key entirely, or to a
+list of parameter names to keep only those:
 
 ```php
 // no query parameter is ever part of the key, on any path
@@ -261,7 +261,7 @@ arrived. The router trims any number of leading and trailing slashes,
 and stops at the first `?` once the url has been decoded, so
 `/projekte`, `//projekte///` and `/projekte%3Fx` are all the same
 page to it. Keying on the raw request URI would make them three cache
-files for one page, and anyone could keep adding slashes to get more.
+files for one page.
 
 This needs no configuration and applies even with
 `UNPLUG_CACHE_KEY_PARAMS` left undefined.
